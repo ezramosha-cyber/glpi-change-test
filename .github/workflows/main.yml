@@ -25,23 +25,33 @@ jobs:
         SESSION_TOKEN=$(echo $SESSION_RESPONSE | jq -r '.session_token')
         echo "Session token obtained"
         
-        # Create change record
+        # Create change record with Applied status
         CHANGE_DATA=$(cat <<EOF
         {
           "input": {
             "name": "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}",
-            "content": "**Pull Request:** ${{ github.event.pull_request.html_url }}\n\n**Description:** ${{ github.event.pull_request.body }}\n\n**Author:** ${{ github.event.pull_request.user.login }}\n\n**Merged by:** ${{ github.actor }}\n\n**Files changed:** ${{ github.event.pull_request.changed_files }} files",
-            "status": 2
+            "content": "**Pull Request:** ${{ github.event.pull_request.html_url }}\n\n**Description:** ${{ github.event.pull_request.body }}\n\n**Author:** ${{ github.event.pull_request.user.login }}\n\n**Merged by:** ${{ github.actor }}\n\n**Merged at:** ${{ github.event.pull_request.merged_at }}\n\n**Files changed:** ${{ github.event.pull_request.changed_files }} files\n\n**Repository:** ${{ github.repository }}",
+            "status": 6,
+            "urgency": 3,
+            "impact": 3,
+            "category": 1
           }
         }
         EOF
         )
         
         # Post to GLPI
-        curl -X POST "${{ secrets.GLPI_API_URL }}/Change" \
+        CHANGE_RESPONSE=$(curl -s -X POST "${{ secrets.GLPI_API_URL }}/Change" \
           -H "Content-Type: application/json" \
           -H "Session-Token: $SESSION_TOKEN" \
           -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}" \
-          -d "$CHANGE_DATA"
+          -d "$CHANGE_DATA")
+        
+        echo "GLPI Response: $CHANGE_RESPONSE"
+        
+        # Kill session
+        curl -s -X GET "${{ secrets.GLPI_API_URL }}/killSession" \
+          -H "Session-Token: $SESSION_TOKEN" \
+          -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}"
         
         echo "Change record created successfully"
