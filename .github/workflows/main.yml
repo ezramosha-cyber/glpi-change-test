@@ -1,0 +1,47 @@
+name: Create GLPI Change Record
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  create-change-record:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create GLPI Change Record
+      run: |
+        # Get session token
+        SESSION_RESPONSE=$(curl -s -X GET "${{ secrets.GLPI_API_URL }}/initSession" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: user_token ${{ secrets.GLPI_USER_TOKEN }}" \
+          -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}")
+        
+        SESSION_TOKEN=$(echo $SESSION_RESPONSE | jq -r '.session_token')
+        echo "Session token obtained"
+        
+        # Create change record
+        CHANGE_DATA=$(cat <<EOF
+        {
+          "input": {
+            "name": "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}",
+            "content": "**Pull Request:** ${{ github.event.pull_request.html_url }}\n\n**Description:** ${{ github.event.pull_request.body }}\n\n**Author:** ${{ github.event.pull_request.user.login }}\n\n**Merged by:** ${{ github.actor }}\n\n**Files changed:** ${{ github.event.pull_request.changed_files }} files",
+            "status": 2
+          }
+        }
+        EOF
+        )
+        
+        # Post to GLPI
+        curl -X POST "${{ secrets.GLPI_API_URL }}/Change" \
+          -H "Content-Type: application/json" \
+          -H "Session-Token: $SESSION_TOKEN" \
+          -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}" \
+          -d "$CHANGE_DATA"
+        
+        echo "Change record created successfully"
