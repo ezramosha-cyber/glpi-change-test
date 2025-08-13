@@ -53,7 +53,7 @@ jobs:
         echo "Merger GLPI ID: $MERGER_ID"
         
         # Build change data with user mapping
-        if [ "$AUTHOR_ID" != "0" ] && [ "$MERGER_ID" != "0" ]; then
+        if [ "$AUTHOR_ID" != "0" ] && [ "$AUTHOR_ID" != "" ] && [ "$MERGER_ID" != "0" ] && [ "$MERGER_ID" != "" ]; then
           echo "Both users found in GLPI - setting requestor and observer"
           CHANGE_DATA=$(cat <<EOF
         {
@@ -70,7 +70,7 @@ jobs:
         }
         EOF
         )
-        elif [ "$AUTHOR_ID" != "0" ]; then
+        elif [ "$AUTHOR_ID" != "0" ] && [ "$AUTHOR_ID" != "" ]; then
           echo "Author found in GLPI - setting requestor only"
           CHANGE_DATA=$(cat <<EOF
         {
