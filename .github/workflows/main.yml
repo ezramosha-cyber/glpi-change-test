@@ -33,11 +33,12 @@ jobs:
             -H "Session-Token: $SESSION_TOKEN" \
             -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}")
           
-          echo "User search response: $USER_SEARCH"
+          echo "User search response for $username: $USER_SEARCH" >&2
           
-          # Extract user ID if found, otherwise return 0
-          if echo "$USER_SEARCH" | jq -e '.data[0]' > /dev/null 2>&1; then
-            echo "$USER_SEARCH" | jq -r '.data[0]["2"]'
+          # Check if response contains valid data
+          if [ -n "$USER_SEARCH" ] && echo "$USER_SEARCH" | jq -e '.data[0]' > /dev/null 2>&1; then
+            USER_ID=$(echo "$USER_SEARCH" | jq -r '.data[0]["2"]')
+            echo "$USER_ID"
           else
             echo "0"
           fi
