@@ -25,8 +25,64 @@ jobs:
         SESSION_TOKEN=$(echo $SESSION_RESPONSE | jq -r '.session_token')
         echo "Session token obtained"
         
-        # Create change record with Applied status
-        CHANGE_DATA=$(cat <<EOF
+        # Function to lookup GLPI user ID by username
+        lookup_user_id() {
+          local username=$1
+          USER_SEARCH=$(curl -s -X GET "${{ secrets.GLPI_API_URL }}/search/User?criteria[0][field]=1&criteria[0][searchtype]=equals&criteria[0][value]=${username}" \
+            -H "Content-Type: application/json" \
+            -H "Session-Token: $SESSION_TOKEN" \
+            -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}")
+          
+          # Extract user ID if found, otherwise return 0
+          echo $USER_SEARCH | jq -r '.data[0].2 // 0'
+        }
+        
+        # Look up GitHub users in GLPI
+        echo "Looking up PR author: ${{ github.event.pull_request.user.login }}"
+        AUTHOR_ID=$(lookup_user_id "${{ github.event.pull_request.user.login }}")
+        echo "Author GLPI ID: $AUTHOR_ID"
+        
+        echo "Looking up merger: ${{ github.actor }}"
+        MERGER_ID=$(lookup_user_id "${{ github.actor }}")
+        echo "Merger GLPI ID: $MERGER_ID"
+        
+        # Build change data with user mapping
+        if [ "$AUTHOR_ID" != "0" ] && [ "$MERGER_ID" != "0" ]; then
+          echo "Both users found in GLPI - setting requestor and observer"
+          CHANGE_DATA=$(cat <<EOF
+        {
+          "input": {
+            "name": "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}",
+            "content": "**Pull Request:** ${{ github.event.pull_request.html_url }}\n\n**Description:** ${{ github.event.pull_request.body }}\n\n**Author:** ${{ github.event.pull_request.user.login }}\n\n**Merged by:** ${{ github.actor }}\n\n**Merged at:** ${{ github.event.pull_request.merged_at }}\n\n**Files changed:** ${{ github.event.pull_request.changed_files }} files\n\n**Repository:** ${{ github.repository }}",
+            "status": 6,
+            "urgency": 3,
+            "impact": 3,
+            "category": 1,
+            "users_id_requester": $AUTHOR_ID,
+            "users_id_observer": $MERGER_ID
+          }
+        }
+        EOF
+        )
+        elif [ "$AUTHOR_ID" != "0" ]; then
+          echo "Author found in GLPI - setting requestor only"
+          CHANGE_DATA=$(cat <<EOF
+        {
+          "input": {
+            "name": "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}",
+            "content": "**Pull Request:** ${{ github.event.pull_request.html_url }}\n\n**Description:** ${{ github.event.pull_request.body }}\n\n**Author:** ${{ github.event.pull_request.user.login }}\n\n**Merged by:** ${{ github.actor }}\n\n**Merged at:** ${{ github.event.pull_request.merged_at }}\n\n**Files changed:** ${{ github.event.pull_request.changed_files }} files\n\n**Repository:** ${{ github.repository }}",
+            "status": 6,
+            "urgency": 3,
+            "impact": 3,
+            "category": 1,
+            "users_id_requester": $AUTHOR_ID
+          }
+        }
+        EOF
+        )
+        else
+          echo "GitHub users not found in GLPI - creating change without user assignment"
+          CHANGE_DATA=$(cat <<EOF
         {
           "input": {
             "name": "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}",
@@ -39,6 +95,7 @@ jobs:
         }
         EOF
         )
+        fi
         
         # Post to GLPI
         CHANGE_RESPONSE=$(curl -s -X POST "${{ secrets.GLPI_API_URL }}/Change" \
