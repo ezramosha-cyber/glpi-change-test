@@ -33,8 +33,14 @@ jobs:
             -H "Session-Token: $SESSION_TOKEN" \
             -H "App-Token: ${{ secrets.GLPI_APP_TOKEN }}")
           
+          echo "User search response: $USER_SEARCH"
+          
           # Extract user ID if found, otherwise return 0
-          echo $USER_SEARCH | jq -r '.data[0].2 // 0'
+          if echo "$USER_SEARCH" | jq -e '.data[0]' > /dev/null 2>&1; then
+            echo "$USER_SEARCH" | jq -r '.data[0]["2"]'
+          else
+            echo "0"
+          fi
         }
         
         # Look up GitHub users in GLPI
